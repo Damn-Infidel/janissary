@@ -267,6 +267,100 @@ def cmd_fingerprint(args: argparse.Namespace) -> int:
 
     return 0 if fp.reachable else 2
 
+def cmd_graphql(args: argparse.Namespace) -> int:
+    from janissary.integrations.graphql import (
+        GraphQLClient,
+        alias_probe,
+        depth_probe,
+        detect,
+        enumerate_fields,
+        fuzz_arguments,
+    )
+
+    proxies = None
+    if getattr(args, "proxy", None):
+        proxies = {"http": args.proxy, "https": args.proxy}
+
+    if not args.quiet:
+        print("JANISSARY — GraphQL recon")
+        print("=" * 60)
+        print(f"[*] Target: {args.url}")
+        if args.endpoint_path:
+            print(f"[*] Endpoint path: {args.endpoint_path}")
+        print()
+
+    profile = detect(
+        args.url,
+        timeout=args.timeout,
+        proxies=proxies,
+        explicit_path=args.endpoint_path,
+    )
+
+    if not profile.reachable:
+        if not args.quiet:
+            print("[!] No reachable GraphQL endpoint found")
+            for n in profile.notes:
+                print(f"    - {n}")
+        return 2
+
+    if not args.quiet:
+        print(f"[*] Endpoint: {profile.endpoint}")
+        print(f"    introspection_enabled={profile.introspection_enabled}")
+        print(f"    query_type={profile.query_type or '-'}")
+        print(f"    mutation_type={profile.mutation_type or '-'}")
+        print(f"    type_count={profile.type_count}")
+        print(f"    batched_queries={profile.batched_queries}")
+        print(f"    suggestions_supported={profile.suggestions_supported}")
+
+    client = GraphQLClient(profile.endpoint, timeout=args.timeout, proxies=proxies)
+    extras: dict = {}
+
+    if getattr(args, "enumerate_fields", False):
+        names = enumerate_fields(client)
+        extras["fields"] = names
+        if not args.quiet:
+            print(f"[*] Fields discovered via suggestions: {len(names)}")
+            for n in names[:30]:
+                print(f"    {n}")
+
+    if getattr(args, "depth_probe", False):
+        depth, msg = depth_probe(client)
+        extras["max_depth"] = depth
+        extras["depth_refusal"] = msg
+        if not args.quiet:
+            print(f"[*] Depth: max accepted={depth} refusal={msg[:60]!r}")
+
+    if getattr(args, "alias_probe", False):
+        count, msg = alias_probe(client)
+        extras["max_aliases"] = count
+        extras["alias_refusal"] = msg
+        if not args.quiet:
+            print(f"[*] Aliases: max accepted={count} refusal={msg[:60]!r}")
+
+    if getattr(args, "fuzz_args", None):
+        # --fuzz-args FIELD:ARG
+        field, _, arg = args.fuzz_args.partition(":")
+        if not field or not arg:
+            print("[!] --fuzz-args requires FIELD:ARG", file=sys.stderr)
+            return 64
+        results = fuzz_arguments(client, field, arg)
+        extras["fuzz"] = [r.to_dict() for r in results]
+        if not args.quiet:
+            print(f"[*] Fuzzed {field}({arg}) with {len(results)} payloads")
+            for r in results:
+                errs = "; ".join(r.errors)[:60]
+                print(f"    {r.payload_name:15} status={r.status} {errs}")
+
+    if args.export:
+        doc = profile.to_dict()
+        doc.update(extras)
+        with open(args.export, "w", encoding="utf-8") as fh:
+            json.dump(doc, fh, indent=2)
+        print(f"[*] Results exported to {args.export}")
+
+    return 0
+
+
 def _write_sarif(summary: ScanSummary, path: str) -> None:
     """Emit a minimal SARIF 2.1.0 document."""
     results = []
@@ -389,6 +483,27 @@ def build_parser() -> argparse.ArgumentParser:
                     help="write the fingerprint to a .json file")
     fp.add_argument("--quiet", action="store_true")
     fp.set_defaults(func=cmd_fingerprint)
+
+    # -- graphql --------------------------------------------------
+    gql = sub.add_parser("graphql", help="recon a GraphQL endpoint")
+    gql.add_argument("url", help="target base URL or endpoint")
+    gql.add_argument("--endpoint-path", default=None,
+                     help="explicit endpoint path (e.g. /graphql)")
+    gql.add_argument("--timeout", type=float, default=10.0)
+    gql.add_argument("--proxy", default=None,
+                     help="HTTP proxy URL (e.g. http://127.0.0.1:8080)")
+    gql.add_argument("--enumerate-fields", action="store_true",
+                     help="try to enumerate fields via error suggestions")
+    gql.add_argument("--depth-probe", action="store_true",
+                     help="find the maximum accepted query depth")
+    gql.add_argument("--alias-probe", action="store_true",
+                     help="find the maximum accepted alias count")
+    gql.add_argument("--fuzz-args", default=None, metavar="FIELD:ARG",
+                     help="fuzz FIELD(ARG: <payload>) with the built-in set")
+    gql.add_argument("--export", default=None,
+                     help="write the profile to a .json file")
+    gql.add_argument("--quiet", action="store_true")
+    gql.set_defaults(func=cmd_graphql)
 
     return p
 

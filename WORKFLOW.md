@@ -1,8 +1,8 @@
 # JANISSARY — Port Workflow Tracker
 
-## STATUS: PHASE 1 COMPLETE — PHASE 2 READY
-## NEXT: P2.1 — GraphQL fuzzer
-## LAST COMPLETED: P1.4 — Platform fingerprint (140 tests pass)
+## STATUS: PHASE 2 — IN PROGRESS
+## NEXT: P2.2 — WebSocket scanner
+## LAST COMPLETED: P2.1 — GraphQL fuzzer (165 tests pass)
 
 Last updated: 2026-09-25
 Project root: C:\Users\M5 E60\janissary-project\janissary
@@ -53,7 +53,7 @@ Goal: janissary scan finds a real SQLi on a mock server.
 
 ## Phase 2 — Medium-value subsystems
 
-- [ ] P2.1 GraphQL fuzzer
+- [x] P2.1 GraphQL fuzzer
 - [ ] P2.2 WebSocket scanner
 - [ ] P2.3 Admin panel probe
 
@@ -62,6 +62,50 @@ Goal: janissary scan finds a real SQLi on a mock server.
 - [ ] P3.1 SQLi UNION extractor (gated behind --attack-confirm)
 - [ ] P3.2 Nuclei runner (expose NucleiRunner, drop stub)
 - [ ] P3.3 Agent / FindingStore / PlatformKB
+
+---
+
+## P2.1 — GraphQL fuzzer (DONE)
+
+Delivered:
+
+- `src/janissary/integrations/graphql.py` — full GraphQL harness.
+  - `GraphQLClient` — JSON POST wrapper with `query`, `batch`, and
+    `post_raw`.
+  - Query builders: `build_nested_query` (depth), `build_alias_query`
+    (alias amplification), `build_argument_query` (payload injection),
+    plus a GraphQL-literal serializer that escapes quotes, backslashes,
+    newlines, and null bytes.
+  - `detect()` — probes candidate endpoints (`/graphql`, `/api/graphql`,
+    `/v1/graphql`, `/query`, `/gql`, or an explicit path), runs the
+    minimal `__typename` probe, then introspection, then batching,
+    then suggestion support. Returns a `GraphQLProfile`.
+  - `enumerate_fields()` — recovers field names from "Did you mean"
+    suggestions, iterated over one or more rounds.
+  - `depth_probe()` — exponential + binary search for the deepest
+    accepted nesting, with refusal message capture.
+  - `alias_probe()` — same strategy for the maximum accepted alias
+    count in a single query.
+  - `fuzz_arguments()` — runs `ARG_PAYLOADS` (SQLi, NoSQL, SSRF,
+    traversal, null byte, deep object) into a given field/argument.
+- `src/janissary/integrations/__init__.py` — new exports; XML-RPC
+  `detect`/`resolve_endpoint` aliased as `xmlrpc_detect` /
+  `xmlrpc_resolve_endpoint` to avoid collision with the GraphQL
+  versions.
+- `src/janissary/cli.py` — new `janissary graphql <url>` subcommand
+  with `--endpoint-path`, `--timeout`, `--proxy`, `--enumerate-fields`,
+  `--depth-probe`, `--alias-probe`, `--fuzz-args FIELD:ARG`, `--export`,
+  `--quiet`.
+- `tests/unit/test_graphql.py` — 25 tests: builders, literal escaping,
+  response parsing (success, error, non-JSON, transport error, batch),
+  endpoint resolution, detection (introspection on/off, HTTP error),
+  field enumeration (with and without suggestions), stateful depth and
+  alias probes, and argument fuzzing.
+
+Suite: 165 tests passing. Ruff clean.
+
+CLI-triggered fuzzing is deliberately conservative: argument fuzzing
+is off by default and must be opted in with `--fuzz-args`.
 
 ---
 
@@ -102,26 +146,24 @@ See prior revision of this file.
 
 ## Current step
 
-P2.1 — GraphQL fuzzer.
+P2.2 — WebSocket scanner.
 
 Not yet started. Design notes to consider:
 
-- New module: `src/janissary/protocols/graphql.py` (create the
-  `protocols` package) or `src/janissary/integrations/graphql.py`.
-  Given the XML-RPC client lives under `integrations`, keep GraphQL
-  there for symmetry unless it needs the same status as `detection`.
-- Surface to cover: introspection query, `__schema`/`__type` probes,
-  field-suggestion enumeration (server errors leak field names),
-  depth-bomb, alias amplification (many aliases in one request),
-  batched-query abuse, and injection-into-arguments probing.
-- Reuse the existing `DifferentialAnalyzer` from `detection` for
-  response comparison rather than reimplementing baseline logic.
-- Reuse `AdaptivePacer` and `WAFDetector` from `recon` at the call
-  site, not inside the GraphQL module.
-- Add a `janissary graphql <url>` CLI subcommand with
-  `--endpoint-path` (default `/graphql`), `--introspect`,
-  `--field-enum`, and `--export`.
-- Tests in `tests/unit/test_graphql.py`, mocked-session pattern.
+- New module under `src/janissary/integrations/websocket.py`
+  (symmetric with the XML-RPC and GraphQL harnesses). The `websockets`
+  dependency is already declared in `pyproject.toml`.
+- Async-first: the rest of JANISSARY is synchronous, so the module
+  should either expose a small sync wrapper around `asyncio.run` or
+  a pure-async API with a helper that runs it from the CLI.
+- Signals to look for: missing origin check, missing auth handshake,
+  messages echoed verbatim (XSS/JSONi risk), cross-site WebSocket
+  hijacking, plaintext `ws://` on a production host, and
+  subscription-style endpoints that accept unauthenticated traffic.
+- A `janissary ws <url>` CLI subcommand with `--message`, `--header`,
+  `--origin`, `--timeout`, and `--export`.
+- Tests in `tests/unit/test_websocket.py`, using a local in-process
+  server rather than mocking the protocol internals.
 
 ---
 
