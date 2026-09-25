@@ -1,0 +1,26 @@
+# Normalize line endings in the repo; check out native on Windows.
+* text=auto eol=lf
+
+# Explicit text types
+*.py     text eol=lf
+*.md     text eol=lf
+*.toml   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.cfg    text eol=lf
+*.ini    text eol=lf
+*.txt    text eol=lf
+
+# Binary types Git should never touch
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.zip    binary
+
+# Keep PowerShell scripts CRLF for Windows-native execution
+*.ps1    text eol=crlf
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
