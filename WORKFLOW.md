@@ -157,28 +157,44 @@ Suite: 235 tests passing. Ruff clean.
 
 ## Current step
 
-P3.2 — Nuclei runner.
+P3.2 - Nuclei runner.
 
-Not yet started. Design notes:
+STATUS: PAUSED at a design decision. Nothing coded yet.
 
-- Check whether a `NucleiRunner` stub already exists in the tree;
-  if not, this is a new module.
-- Likely home: `src/janissary/attack/nuclei.py`.
-- Nuclei is an external binary. The runner shells out via
-  subprocess, streams JSONL output, and parses each line into a
-  structured result. Do not reimplement the template engine.
-- Guard rails: `--attack-confirm` required; refuse if `nuclei` is
-  not on PATH; require an explicit `--templates` list rather than
-  running Nuclei's default template set.
-- CLI: `janissary attack nuclei <url>` with `--templates`,
-  `--severity`, `--attack-confirm`, `--timeout`, `--export`,
-  `--quiet`.
-- Tests in `tests/unit/test_nuclei.py`, mocking `subprocess.run`.
-- Confirm the DSGL position with Defence Export Controls before
-  any public release.
+### OPEN DECISION: where does the Nuclei module live?
+
+**Option A - src/janissary/attack/nuclei.py**
+
+- Nuclei is active exploitation. Everything in attack/ carries the
+  --attack-confirm gate.
+- Consistent with P3.1: extraction and exploitation live together.
+- The gate is the legal mechanism. Placing the module here means it
+  inherits that framing without argument.
+
+**Option B - src/janissary/integrations/nuclei.py**
+
+- Nuclei is an external binary. integrations/ already holds the
+  protocol clients (xmlrpc, graphql, websocket).
+- The module's job is mostly subprocess + JSONL parsing.
+- BUT: integrations/ modules do not all carry the attack-confirm
+  gate, so the gate would have to be added explicitly.
+
+**Leaning:** Option A, because the gate is what matters legally and
+attack/ already establishes it. Confirm before coding.
+
+### Design notes (once placement is decided)
+
+- Shell out via subprocess; stream JSONL; parse each line.
+- Do not reimplement Nuclei's template engine.
+- Require --attack-confirm; refuse if nuclei is not on PATH;
+  require an explicit --templates list rather than the default set.
+- CLI: janissary attack nuclei <url> with --templates, --severity,
+  --attack-confirm, --timeout, --export, --quiet.
+- Tests: tests/unit/test_nuclei.py, mocking subprocess.run.
+- Confirm DSGL position with Defence Export Controls before any
+  public release.
 
 ---
-
 ## Git status note
 
 All work through P3.1 is committed and pushed. The legal framework,
