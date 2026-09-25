@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import re
 
-
 GITLEAKS_RULES: list[dict] = [
     {
         "id": "generic-api-key",

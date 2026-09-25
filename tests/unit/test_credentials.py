@@ -8,7 +8,6 @@ must return zero findings — a regression guard against over-broad rules.
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 
@@ -21,7 +20,6 @@ from janissary.credentials.scanner import (
     scan_text_for_secrets,
     shannon_entropy,
 )
-
 
 # -------------------------------------------------------------------
 # RULES SANITY
@@ -89,7 +87,7 @@ def test_aws_example_is_suppressed():
     assert hits == []
 
 
-def test_generic_key_with_YOUR_prefix_is_suppressed():
+def test_generic_key_with_your_prefix_is_suppressed():
     text = "api_key = YOUR_abcdefghijklmnopqrstuvwxyz"
     hits = scan_text_for_secrets(text, "test")
     assert hits == []

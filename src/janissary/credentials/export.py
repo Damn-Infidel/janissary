@@ -12,7 +12,6 @@ import json
 import os
 from datetime import datetime, timezone
 
-
 CSV_COLUMNS = [
     "token_type", "description", "redacted", "source", "line",
     "context", "severity", "entropy", "timestamp",

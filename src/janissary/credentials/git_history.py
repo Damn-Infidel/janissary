@@ -51,7 +51,6 @@ from pathlib import Path
 
 from .scanner import scan_text_for_secrets
 
-
 GIT_TIMEOUT = 60
 WINDOWS_RETRYABLE_CODES = {3221225477, 3221225501}  # ACCESS_VIOLATION, DLL_INIT_FAILED
 
@@ -78,7 +77,7 @@ def _validate_repo_path(repo_path: str, allow_root: str | None = None) -> Path:
         try:
             p.relative_to(root)
         except ValueError:
-            raise ValueError(f"{p} is not under allowed root {root}")
+            raise ValueError(f"{p} is not under allowed root {root}") from None
     return p
 
 
@@ -171,9 +170,7 @@ def _added_lines(diff_text: str) -> str:
             continue
         if line.startswith("-"):
             continue
-        if line.startswith("+"):
-            out.append(line[1:])
-        elif line.startswith(" "):
+        if line.startswith("+") or line.startswith(" "):
             out.append(line[1:])
     return "\n".join(out)
 
@@ -228,7 +225,7 @@ def scan_git_history(
         print(f"[*] git history: {len(commits)} commit(s) to inspect")
 
     findings: list[dict] = []
-    for i, (sha, author, date, subject) in enumerate(commits, 1):
+    for i, (sha, author, date, _subject) in enumerate(commits, 1):
         hits = scan_commit(repo, sha, enable_entropy=enable_entropy)
         for h in hits:
             h["commit"] = sha

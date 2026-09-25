@@ -28,11 +28,10 @@ import math
 import os
 import re
 from collections import Counter
+from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import Iterator
 
 from .rules import ALL_RULES
-
 
 # -------------------------------------------------------------------
 # CONSTANTS
@@ -171,10 +170,9 @@ def _iter_secret_matches(
         return
 
     def _overlaps(start: int, end: int) -> bool:
-        for s_start, s_end in spans:
-            if start < s_end and s_start < end:
-                return True
-        return False
+        return any(
+            start < s_end and s_start < end for s_start, s_end in spans
+        )
 
     def _classes_ok(candidate: str) -> bool:
         classes = 0
@@ -278,7 +276,7 @@ def scan_file_for_secrets(
     if size > MAX_FILE_BYTES:
         return []
     try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
             text = fh.read()
     except OSError:
         return []
