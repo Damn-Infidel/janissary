@@ -1,8 +1,8 @@
 # JANISSARY — Port Workflow Tracker
 
-## STATUS: PHASE 2 COMPLETE — PHASE 3 READY
+## STATUS: PHASE 3 — READY (legal framework in place)
 ## NEXT: P3.1 — SQLi UNION extractor (gated behind --attack-confirm)
-## LAST COMPLETED: P2.3 — Admin panel probe (191 tests pass)
+## LAST COMPLETED: Legal framework — LEGAL.md + first-run acceptance gate (210 tests pass)
 
 Last updated: 2026-09-25
 Project root: C:\Users\M5 E60\janissary-project\janissary
@@ -62,6 +62,34 @@ Goal: janissary scan finds a real SQLi on a mock server.
 - [ ] P3.1 SQLi UNION extractor (gated behind --attack-confirm)
 - [ ] P3.2 Nuclei runner (expose NucleiRunner, drop stub)
 - [ ] P3.3 Agent / FindingStore / PlatformKB
+
+---
+
+## Legal framework — Terms of Use + acceptance gate (DONE)
+
+Before Phase 3 (which introduces active data extraction), the project
+gained a legal framework designed to protect the developer.
+
+- `LEGAL.md` — supplementary Terms of Use. Clauses: authorised use,
+  indemnity, limitation of liability, export control, good-faith
+  research, no warranty, governing law. Apache-2.0 remains the code
+  licence; LEGAL.md supplements it, does not modify it. Governing
+  law and jurisdiction: Victoria, Australia.
+- `src/janissary/legal.py` — versioned terms text, marker helpers
+  (`~/.janissary/terms-accepted.json`), `require_acceptance()`.
+  Marker stores version + UTC timestamp only. No telemetry.
+- `src/janissary/cli.py` — gate in `main()`. Gated commands: scan,
+  fingerprint, graphql, ws, admin, future attack. New
+  `janissary terms {show,status,accept}` subcommand.
+- Acceptance: TTY prompt (exact string `I AGREE`),
+  `janissary terms accept`, or `JANISSARY_ACCEPT_TERMS=1`.
+  Non-TTY without either exits 64 with instructions.
+- `README.md` — Authorised-Use block at the top.
+- `tests/unit/test_legal.py` — 19 tests.
+
+Known limits (LEGAL.md clause 9): the gate covers the CLI only; the
+indemnity and liability cap bind only users who accept; export
+control obligations cannot be contracted away.
 
 ---
 

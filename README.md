@@ -2,6 +2,26 @@
 
 **Automated offensive security platform for small teams.**
 
+> ### ⚠️ Authorised use only
+>
+> JANISSARY is a dual-use security testing tool. Use it **only**
+> against systems you own, or systems you have the prior, explicit,
+> written permission of the owner to test.
+>
+> Unauthorised access to computer systems is a criminal offence in
+> Australia (Criminal Code Act 1995 (Cth) ss 477–478), the United
+> States (18 U.S.C. § 1030 — CFAA), the United Kingdom (Computer
+> Misuse Act 1990), the European Union (Directive 2013/40/EU), and
+> most other jurisdictions.
+>
+> By running any network command you accept the
+> [Terms of Use](LEGAL.md), including the authorised-use requirement,
+> the user indemnity, and the limitation of liability. Acceptance is
+> recorded locally in `~/.janissary/terms-accepted.json`; no data is
+> transmitted.
+>
+> Review the terms at any time with `janissary terms show`.
+
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
 

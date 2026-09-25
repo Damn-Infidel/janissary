@@ -10,6 +10,7 @@ Exit codes follow the sysexits.h convention:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 
@@ -454,6 +455,43 @@ def cmd_admin(args: argparse.Namespace) -> int:
     return 0 if not profile.hits else 1
 
 
+def cmd_terms(args: argparse.Namespace) -> int:
+    from janissary.legal import (
+        TERMS_TEXT,
+        TERMS_VERSION,
+        is_accepted,
+        marker_path,
+        record_acceptance,
+    )
+
+    action = getattr(args, "action", "show") or "show"
+
+    if action == "show":
+        print(TERMS_TEXT)
+        return 0
+
+    if action == "status":
+        p = marker_path()
+        if is_accepted():
+            print(f"Terms version {TERMS_VERSION}: ACCEPTED")
+            print(f"Marker: {p}")
+            with contextlib.suppress(OSError):
+                print(p.read_text(encoding="utf-8"))
+            return 0
+        print(f"Terms version {TERMS_VERSION}: NOT ACCEPTED")
+        print(f"Marker: {p}")
+        return 1
+
+    if action == "accept":
+        p = record_acceptance()
+        print(f"Terms version {TERMS_VERSION} accepted.")
+        print(f"Recorded at {p}")
+        return 0
+
+    print(f"[!] unknown terms action: {action}", file=sys.stderr)
+    return 64
+
+
 def _write_sarif(summary: ScanSummary, path: str) -> None:
     """Emit a minimal SARIF 2.1.0 document."""
     results = []
@@ -624,6 +662,19 @@ def build_parser() -> argparse.ArgumentParser:
     adm.add_argument("--quiet", action="store_true")
     adm.set_defaults(func=cmd_admin)
 
+    # -- terms ----------------------------------------------------
+    terms = sub.add_parser(
+        "terms", help="show or record acceptance of the Terms of Use"
+    )
+    terms.add_argument(
+        "action",
+        nargs="?",
+        default="show",
+        choices=["show", "status", "accept"],
+        help="show the full text (default), report status, or accept",
+    )
+    terms.set_defaults(func=cmd_terms)
+
     return p
 
 # -------------------------------------------------------------------
@@ -637,6 +688,12 @@ def main(argv: list[str] | None = None) -> int:
     if not getattr(args, "command", None):
         parser.print_help()
         return 0
+
+    # Terms-of-Use gate. Non-gated commands (help, version, creds,
+    # terms) return from require_acceptance immediately.
+    from janissary.legal import require_acceptance
+
+    require_acceptance(args.command)
 
     return args.func(args)
 
