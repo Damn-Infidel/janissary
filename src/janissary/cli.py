@@ -409,6 +409,51 @@ def cmd_websocket(args: argparse.Namespace) -> int:
     return 1 if profile.findings else 0
 
 
+def cmd_admin(args: argparse.Namespace) -> int:
+    from janissary.recon.admin import probe_admin
+
+    proxies = None
+    if getattr(args, "proxy", None):
+        proxies = {"http": args.proxy, "https": args.proxy}
+
+    if not args.quiet:
+        print("JANISSARY — admin panel probe")
+        print("=" * 60)
+        print(f"[*] Target: {args.url}")
+        print()
+
+    profile = probe_admin(
+        args.url,
+        timeout=args.timeout,
+        proxies=proxies,
+    )
+
+    if not profile.reachable:
+        if not args.quiet:
+            print("[!] Target unreachable")
+            for n in profile.notes:
+                print(f"    - {n}")
+        return 2
+
+    if not args.quiet:
+        print(f"[*] Probed {profile.paths_probed} paths, "
+              f"{len(profile.hits)} hit(s)")
+        for h in profile.hits:
+            marker = "LOGIN" if h.is_login_form else "     "
+            loc = f" -> {h.location}" if h.location else ""
+            ver = f" [{h.version_hint}]" if h.version_hint else ""
+            print(f"    {h.status} {marker} {h.platform:12} {h.path}{loc}{ver}")
+            for n in h.notes:
+                print(f"          - {n}")
+
+    if args.export:
+        with open(args.export, "w", encoding="utf-8") as fh:
+            json.dump(profile.to_dict(), fh, indent=2)
+        print(f"[*] Results exported to {args.export}")
+
+    return 0 if not profile.hits else 1
+
+
 def _write_sarif(summary: ScanSummary, path: str) -> None:
     """Emit a minimal SARIF 2.1.0 document."""
     results = []
@@ -567,6 +612,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="write the profile to a .json file")
     ws.add_argument("--quiet", action="store_true")
     ws.set_defaults(func=cmd_websocket)
+
+    # -- admin ----------------------------------------------------
+    adm = sub.add_parser("admin", help="probe for admin panels")
+    adm.add_argument("url", help="target base URL")
+    adm.add_argument("--timeout", type=float, default=10.0)
+    adm.add_argument("--proxy", default=None,
+                     help="HTTP proxy URL (e.g. http://127.0.0.1:8080)")
+    adm.add_argument("--export", default=None,
+                     help="write the profile to a .json file")
+    adm.add_argument("--quiet", action="store_true")
+    adm.set_defaults(func=cmd_admin)
 
     return p
 

@@ -1,8 +1,8 @@
 # JANISSARY — Port Workflow Tracker
 
-## STATUS: PHASE 2 — IN PROGRESS
-## NEXT: P2.3 — Admin panel probe
-## LAST COMPLETED: P2.2 — WebSocket scanner (178 tests pass)
+## STATUS: PHASE 2 COMPLETE — PHASE 3 READY
+## NEXT: P3.1 — SQLi UNION extractor (gated behind --attack-confirm)
+## LAST COMPLETED: P2.3 — Admin panel probe (191 tests pass)
 
 Last updated: 2026-09-25
 Project root: C:\Users\M5 E60\janissary-project\janissary
@@ -51,17 +51,53 @@ Goal: janissary scan finds a real SQLi on a mock server.
 - [x] P1.3 XML-RPC multicall harness
 - [x] P1.4 Platform fingerprint
 
-## Phase 2 — Medium-value subsystems
+## Phase 2 — Medium-value subsystems — COMPLETE
 
 - [x] P2.1 GraphQL fuzzer
 - [x] P2.2 WebSocket scanner
-- [ ] P2.3 Admin panel probe
+- [x] P2.3 Admin panel probe
 
 ## Phase 3 — Low-value / risky subsystems
 
 - [ ] P3.1 SQLi UNION extractor (gated behind --attack-confirm)
 - [ ] P3.2 Nuclei runner (expose NucleiRunner, drop stub)
 - [ ] P3.3 Agent / FindingStore / PlatformKB
+
+---
+
+## P2.3 — Admin panel probe (DONE)
+
+Delivered:
+
+- `src/janissary/recon/admin.py` — admin panel discovery.
+  - `ADMIN_PATHS` — 18 platforms, each with 1-3 well-known paths:
+    WordPress, Drupal, Joomla, Magento, Ghost, TYPO3, Tomcat,
+    Jenkins, Grafana, Kibana, Prometheus, Kubernetes, phpMyAdmin,
+    cPanel, Plesk, Webmin, RabbitMQ, Elasticsearch.
+  - `AdminProbe` / `probe_admin()` — probes each path with
+    `allow_redirects=False` and classifies the response.
+  - Classification rules:
+      - 200/201 → hit.
+      - 3xx → hit only if the Location header mentions the probed
+        path, "login", or "signin".
+      - 401/403 → hit only for platforms listed in
+        `PROTECTED_IS_HIT` (Tomcat, Jenkins, Kubernetes, phpMyAdmin,
+        Grafana); a bare 401 on WordPress is not a hit.
+  - Extracts: `Location` header, login-form detection (password
+    input + `<form>`), `<title>`, version hints from `generator`
+    meta, `Version: N.N.N` body regex, or `Server` header regex.
+  - Never submits credentials; never attempts default logins.
+- `src/janissary/recon/__init__.py` — exports `ADMIN_PATHS`,
+  `AdminHit`, `AdminProbe`, `AdminProfile`, `probe_admin`.
+- `src/janissary/cli.py` — new `janissary admin <url>` subcommand
+  with `--timeout`, `--proxy`, `--export`, `--quiet`.
+- `tests/unit/test_admin.py` — 13 tests: unreachable target,
+  login-form detection, redirect-to-login as hit,
+  redirect-unrelated as miss, protected 401 as hit, unprotected 401
+  as miss, version hint from generator / body / Server header,
+  custom paths, serialisation.
+
+Suite: 191 tests passing. Ruff clean.
 
 ---
 
@@ -183,25 +219,34 @@ See prior revision of this file.
 
 ## Current step
 
-P2.3 — Admin panel probe.
+P3.1 — SQLi UNION extractor (gated behind --attack-confirm).
 
 Not yet started. Design notes to consider:
 
-- New module `src/janissary/recon/admin.py` (recon is the natural
-  home; it is a discovery step, not a protocol client).
-- What to probe: well-known admin paths per platform (WordPress
-  /wp-admin/, Drupal /user/login, Joomla /administrator/, Magento
-  /admin/, Tomcat /manager/html, Jenkins /manage, Grafana /login,
-  Kubernetes /api/v1/namespaces, etc.). Reuse the CMS tables from
-  `recon/fingerprint.py` where possible.
-- Report, per path: status code, redirect target, presence of a
-  login form (regex on `<form>` with a password input), and whether
-  the response leaks a version string.
-- Never submit credentials, never attempt default logins — just
-  identity and version disclosure.
-- A `janissary admin <url>` CLI subcommand with `--wordlist` (custom
-  path list), `--timeout`, `--proxy`, `--export`, `--quiet`.
-- Tests in `tests/unit/test_admin.py`, mocked-session pattern.
+- This is the first Phase 3 module, and it is destructive-adjacent:
+  it actively enumerates data from a vulnerable column. It must be
+  opt-in. The existing `scan` command already gates SQLi detection;
+  this module extends detection to extraction, and must be behind an
+  explicit `--attack-confirm` flag on whichever CLI surface invokes
+  it, per the original roadmap.
+- Likely home: `src/janissary/attack/sqli_union.py` (create the
+  `attack` package) or extend `src/janissary/detection/analyzer.py`.
+  Given Phase 3 also has an agent/FindingStore subsystem that wants
+  to consume this, `attack` as a new package is cleaner.
+- Core capability: given a target URL, parameter, and column count
+  (or a discovered one from the P0-era SQLi checks), build
+  `UNION SELECT ...` payloads that pull a known string, then a
+  version banner, then database names, then table names, and return
+  each in a structured result.
+- Strict limits: max rows, max bytes, timeout per request, and a
+  hard kill switch if the response contains error signatures that
+  indicate the server is unstable.
+- Reuse the `AdaptivePacer` from `recon` at the call site.
+- A `janissary attack sqli-union <url>` CLI subcommand with
+  `--param`, `--columns`, `--attack-confirm` (required),
+  `--max-rows`, `--export`, `--quiet`.
+- Tests in `tests/unit/test_sqli_union.py`, mocked-session pattern.
+  No live-network tests.
 
 ---
 
