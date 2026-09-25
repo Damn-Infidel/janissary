@@ -492,6 +492,99 @@ def cmd_terms(args: argparse.Namespace) -> int:
     return 64
 
 
+def cmd_attack_sqli_union(args: argparse.Namespace) -> int:
+    from janissary.attack.sqli_union import (
+        AttackConfirmationRequired,
+        UnionExtractor,
+        UnstableTargetError,
+    )
+
+    if not args.attack_confirm:
+        print(
+            "[!] --attack-confirm is required. This command extracts "
+            "data from a target and will not run without an explicit "
+            "confirmation flag.",
+            file=sys.stderr,
+        )
+        print(
+            "    This is a separate gate from the Terms of Use. "
+            "Both are required.",
+            file=sys.stderr,
+        )
+        return 64
+
+    proxies = None
+    if getattr(args, "proxy", None):
+        proxies = {"http": args.proxy, "https": args.proxy}
+
+    if not args.quiet:
+        print("JANISSARY — UNION extractor")
+        print("=" * 60)
+        print(f"[*] Target:  {args.url}")
+        print(f"[*] Param:   {args.param}")
+        print(f"[*] Columns: {args.columns}")
+        print(f"[*] Max rows: {args.max_rows}")
+        print()
+        print("[!] Active extraction mode. Only run against systems you")
+        print("    are authorised to test.")
+        print()
+
+    try:
+        extractor = UnionExtractor(
+            target=args.url,
+            param=args.param,
+            columns=args.columns,
+            attack_confirm=True,
+            timeout=args.timeout,
+            max_rows=args.max_rows,
+            proxies=proxies,
+        )
+    except AttackConfirmationRequired as exc:
+        print(f"[!] {exc}", file=sys.stderr)
+        return 64
+    except ValueError as exc:
+        print(f"[!] {exc}", file=sys.stderr)
+        return 64
+
+    try:
+        result = extractor.run()
+    except UnstableTargetError as exc:
+        print(f"[!] Aborted: {exc}", file=sys.stderr)
+        return 2
+
+    if not args.quiet:
+        print(f"[*] DBMS:              {result.dbms}")
+        print(f"[*] Reflecting column: {result.reflecting_column}")
+        print(f"[*] Version:           {result.version or '-'}")
+        print(f"[*] Current database:  {result.current_database or '-'}")
+        if result.databases:
+            print(f"[*] Databases ({len(result.databases)}):")
+            for d in result.databases:
+                print(f"      {d}")
+        if result.tables:
+            print(f"[*] Tables ({len(result.tables)}):")
+            for t in result.tables:
+                print(f"      {t}")
+        print(f"[*] Total requests:    {result.total_requests}")
+        if result.aborted:
+            print(f"[!] ABORTED: {result.abort_reason}")
+        if result.steps and not args.quiet:
+            print()
+            print("  Extraction steps:")
+            for s in result.steps:
+                val = s.value or s.error or "-"
+                print(f"    {s.name:24} status={s.status} {val[:60]}")
+
+    if args.export:
+        with open(args.export, "w", encoding="utf-8") as fh:
+            json.dump(result.to_dict(), fh, indent=2)
+        print(f"[*] Results exported to {args.export}")
+
+    if result.aborted:
+        return 2
+    return 0 if result.version or result.current_database else 1
+
+
 def _write_sarif(summary: ScanSummary, path: str) -> None:
     """Emit a minimal SARIF 2.1.0 document."""
     results = []
@@ -674,6 +767,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="show the full text (default), report status, or accept",
     )
     terms.set_defaults(func=cmd_terms)
+
+    # -- attack ---------------------------------------------------
+    attack = sub.add_parser(
+        "attack", help="active exploitation (authorised targets only)"
+    )
+    attack_sub = attack.add_subparsers(dest="attack_command")
+
+    union = attack_sub.add_parser(
+        "sqli-union", help="extract data via UNION-based SQL injection"
+    )
+    union.add_argument("url", help="target URL")
+    union.add_argument("--param", required=True,
+                       help="vulnerable parameter name")
+    union.add_argument("--columns", type=int, required=True,
+                       help="number of columns in the query (1-32)")
+    union.add_argument(
+        "--attack-confirm",
+        action="store_true",
+        help="required: confirm you are authorised to extract data from "
+             "this target",
+    )
+    union.add_argument("--timeout", type=float, default=10.0)
+    union.add_argument("--max-rows", type=int, default=25)
+    union.add_argument("--proxy", default=None,
+                       help="HTTP proxy URL (e.g. http://127.0.0.1:8080)")
+    union.add_argument("--export", default=None,
+                       help="write results to a .json file")
+    union.add_argument("--quiet", action="store_true")
+    union.set_defaults(func=cmd_attack_sqli_union)
 
     return p
 
