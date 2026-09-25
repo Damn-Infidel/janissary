@@ -361,6 +361,54 @@ def cmd_graphql(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_websocket(args: argparse.Namespace) -> int:
+    from janissary.integrations.websocket import scan_sync
+
+    if not args.quiet:
+        print("JANISSARY — WebSocket recon")
+        print("=" * 60)
+        print(f"[*] Target: {args.url}")
+        print()
+
+    try:
+        profile = scan_sync(
+            args.url,
+            timeout=args.timeout,
+            origin=args.origin,
+            evil_origin=args.evil_origin,
+            echo_payload=args.payload,
+        )
+    except Exception as exc:
+        print(f"[!] WebSocket scan failed: {exc}", file=sys.stderr)
+        return 2
+
+    if not args.quiet:
+        print(f"  Reachable:      {profile.reachable}")
+        print(f"  Scheme:         {profile.scheme or '-'}")
+        print(f"  Subprotocol:    {profile.subprotocol or '-'}")
+        print(f"  Server:         {profile.server_header or '-'}")
+        print(f"  Msgs sent/rcvd: {profile.messages_sent}/{profile.messages_received}")
+        if profile.findings:
+            print()
+            print("  Findings:")
+            for f in profile.findings:
+                print(f"    {f.severity.upper():8} [{f.category}] {f.detail}")
+        if profile.notes:
+            print()
+            print("  Notes:")
+            for n in profile.notes:
+                print(f"    - {n}")
+
+    if args.export:
+        with open(args.export, "w", encoding="utf-8") as fh:
+            json.dump(profile.to_dict(), fh, indent=2)
+        print(f"[*] Results exported to {args.export}")
+
+    if not profile.reachable:
+        return 2
+    return 1 if profile.findings else 0
+
+
 def _write_sarif(summary: ScanSummary, path: str) -> None:
     """Emit a minimal SARIF 2.1.0 document."""
     results = []
@@ -504,6 +552,21 @@ def build_parser() -> argparse.ArgumentParser:
                      help="write the profile to a .json file")
     gql.add_argument("--quiet", action="store_true")
     gql.set_defaults(func=cmd_graphql)
+
+    # -- ws -------------------------------------------------------
+    ws = sub.add_parser("ws", help="recon a WebSocket endpoint")
+    ws.add_argument("url", help="WebSocket URL (ws:// or wss://)")
+    ws.add_argument("--timeout", type=float, default=10.0)
+    ws.add_argument("--origin", default=None,
+                    help="Origin header to send on the baseline connect")
+    ws.add_argument("--evil-origin", default="http://evil.example.com",
+                    help="Origin to try for cross-site WebSocket hijacking")
+    ws.add_argument("--payload", default="<script>alert(1)</script>",
+                    help="payload for the echo probe")
+    ws.add_argument("--export", default=None,
+                    help="write the profile to a .json file")
+    ws.add_argument("--quiet", action="store_true")
+    ws.set_defaults(func=cmd_websocket)
 
     return p
 

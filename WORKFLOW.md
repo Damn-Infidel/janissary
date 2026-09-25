@@ -1,8 +1,8 @@
 # JANISSARY — Port Workflow Tracker
 
 ## STATUS: PHASE 2 — IN PROGRESS
-## NEXT: P2.2 — WebSocket scanner
-## LAST COMPLETED: P2.1 — GraphQL fuzzer (165 tests pass)
+## NEXT: P2.3 — Admin panel probe
+## LAST COMPLETED: P2.2 — WebSocket scanner (178 tests pass)
 
 Last updated: 2026-09-25
 Project root: C:\Users\M5 E60\janissary-project\janissary
@@ -54,7 +54,7 @@ Goal: janissary scan finds a real SQLi on a mock server.
 ## Phase 2 — Medium-value subsystems
 
 - [x] P2.1 GraphQL fuzzer
-- [ ] P2.2 WebSocket scanner
+- [x] P2.2 WebSocket scanner
 - [ ] P2.3 Admin panel probe
 
 ## Phase 3 — Low-value / risky subsystems
@@ -62,6 +62,43 @@ Goal: janissary scan finds a real SQLi on a mock server.
 - [ ] P3.1 SQLi UNION extractor (gated behind --attack-confirm)
 - [ ] P3.2 Nuclei runner (expose NucleiRunner, drop stub)
 - [ ] P3.3 Agent / FindingStore / PlatformKB
+
+---
+
+## P2.2 — WebSocket scanner (DONE)
+
+Delivered:
+
+- `src/janissary/integrations/websocket.py` — async-first WebSocket
+  recon harness.
+  - `WebSocketProfile` / `WebSocketFinding` dataclasses, `to_dict()`
+    for JSON export.
+  - `is_plaintext(url)` — flags `ws://` against non-loopback hosts.
+  - `scan(url, ...)` — async entry point. Runs a baseline connect,
+    then an echo probe (sends a payload, checks whether it comes back
+    verbatim), then a second connect with an evil Origin header to
+    detect cross-site WebSocket hijacking.
+  - `scan_sync(url, ...)` — `asyncio.run` wrapper for sync callers.
+  - Pins `proxy=None` on connect so environment proxy settings never
+    leak into a scanner run; uses websockets 17.x's dedicated
+    `user_agent_header` parameter rather than injecting a duplicate
+    header via `additional_headers`.
+- `src/janissary/integrations/__init__.py` — exports
+  `WebSocketProfile`, `WebSocketFinding`, `is_plaintext`,
+  `profile_to_json`, plus `websocket_scan` / `websocket_scan_sync`
+  aliases (the bare names `scan` / `scan_sync` are deliberately not
+  re-exported to avoid shadowing the GraphQL/XML-RPC namespace).
+- `src/janissary/cli.py` — new `janissary ws <url>` subcommand with
+  `--timeout`, `--origin`, `--evil-origin`, `--payload`, `--export`,
+  `--quiet`.
+- `tests/unit/test_websocket.py` — 13 tests. Spins up real
+  in-process `websockets.serve` instances on ephemeral localhost
+  ports: baseline handshake, echo detection, silent-server path,
+  origin-not-checked finding, origin-enforced (via
+  `process_request`) no-finding, unreachable-host error path, and
+  a threaded sync-wrapper test.
+
+Suite: 178 tests passing. Ruff clean.
 
 ---
 
@@ -146,24 +183,25 @@ See prior revision of this file.
 
 ## Current step
 
-P2.2 — WebSocket scanner.
+P2.3 — Admin panel probe.
 
 Not yet started. Design notes to consider:
 
-- New module under `src/janissary/integrations/websocket.py`
-  (symmetric with the XML-RPC and GraphQL harnesses). The `websockets`
-  dependency is already declared in `pyproject.toml`.
-- Async-first: the rest of JANISSARY is synchronous, so the module
-  should either expose a small sync wrapper around `asyncio.run` or
-  a pure-async API with a helper that runs it from the CLI.
-- Signals to look for: missing origin check, missing auth handshake,
-  messages echoed verbatim (XSS/JSONi risk), cross-site WebSocket
-  hijacking, plaintext `ws://` on a production host, and
-  subscription-style endpoints that accept unauthenticated traffic.
-- A `janissary ws <url>` CLI subcommand with `--message`, `--header`,
-  `--origin`, `--timeout`, and `--export`.
-- Tests in `tests/unit/test_websocket.py`, using a local in-process
-  server rather than mocking the protocol internals.
+- New module `src/janissary/recon/admin.py` (recon is the natural
+  home; it is a discovery step, not a protocol client).
+- What to probe: well-known admin paths per platform (WordPress
+  /wp-admin/, Drupal /user/login, Joomla /administrator/, Magento
+  /admin/, Tomcat /manager/html, Jenkins /manage, Grafana /login,
+  Kubernetes /api/v1/namespaces, etc.). Reuse the CMS tables from
+  `recon/fingerprint.py` where possible.
+- Report, per path: status code, redirect target, presence of a
+  login form (regex on `<form>` with a password input), and whether
+  the response leaks a version string.
+- Never submit credentials, never attempt default logins — just
+  identity and version disclosure.
+- A `janissary admin <url>` CLI subcommand with `--wordlist` (custom
+  path list), `--timeout`, `--proxy`, `--export`, `--quiet`.
+- Tests in `tests/unit/test_admin.py`, mocked-session pattern.
 
 ---
 

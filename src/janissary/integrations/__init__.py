@@ -19,6 +19,14 @@ from .graphql import (
     fuzz_arguments,
     resolve_endpoint,
 )
+from .websocket import (
+    WebSocketFinding,
+    WebSocketProfile,
+    is_plaintext,
+    profile_to_json,
+)
+from .websocket import scan as websocket_scan
+from .websocket import scan_sync as websocket_scan_sync
 from .xmlrpc import (
     AUTH_METHODS,
     METHODS_OF_INTEREST,
@@ -47,6 +55,8 @@ __all__ = [
     "GraphQLError",
     "GraphQLProfile",
     "GraphQLResponse",
+    "WebSocketFinding",
+    "WebSocketProfile",
     "XmlRpcAttempt",
     "XmlRpcClient",
     "XmlRpcError",
@@ -63,9 +73,13 @@ __all__ = [
     "detect",
     "enumerate_fields",
     "fuzz_arguments",
+    "is_plaintext",
     "parse_response",
     "pingback_probe",
+    "profile_to_json",
     "resolve_endpoint",
+    "websocket_scan",
+    "websocket_scan_sync",
     "xmlrpc_detect",
     "xmlrpc_resolve_endpoint",
 ]
