@@ -115,7 +115,8 @@ def _print_summary(summary: ScanSummary) -> None:
         for i, g in enumerate(summary.groups, start=1):
             print(
                 f"    F-{i:03d}  {g.severity.upper():8} "
-                f"{g.category}:{g.root_cause}  (param={g.param})"
+                                f"{g.category + ':' if g.category else ''}{g.root_cause}"
+                f"  (param={g.param})"
             )
             for e in g.evidence:
                 print(

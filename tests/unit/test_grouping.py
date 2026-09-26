@@ -35,7 +35,13 @@ class _F:
 def test_classify_known_pair():
     assert classify_root_cause("sqli", "db_error") == "sql_injection"
     assert classify_root_cause("sqli", "status_change") == "sql_injection"
+
+
+def test_classify_reflection_canonicalises():
     assert classify_root_cause("sqli", "payload_reflected") == "reflection"
+    assert classify_root_cause("xss", "payload_reflected") == "reflection"
+    assert classify_root_cause("xss", "reflected_xss") == "reflection"
+    assert classify_root_cause("traversal", "payload_reflected") == "reflection"
 
 
 def test_classify_falls_through():
@@ -109,3 +115,17 @@ def test_group_to_dict_roundtrip():
 
 def test_empty_input():
     assert group_findings([]) == []
+
+
+def test_reflection_collapses_across_categories():
+    findings = [
+        _F("q", "sqli", "low", "payload_reflected"),
+        _F("q", "xss", "high", "reflected_xss"),
+        _F("q", "traversal", "low", "payload_reflected"),
+        _F("q", "cmdi", "low", "payload_reflected"),
+    ]
+    groups = group_findings(findings)
+    assert len(groups) == 1
+    assert groups[0].root_cause == "reflection"
+    assert groups[0].severity == "high"
+    assert groups[0].evidence_count == 4
