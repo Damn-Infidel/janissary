@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from janissary.engine.scanner import ScanFinding
+    pass
 
 # (category, finding_type) -> root_cause.
 # Unmapped pairs fall through to finding_type.
