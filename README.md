@@ -1,56 +1,32 @@
 # JANISSARY
 
-**Automated offensive security platform for small teams.**
+**Differential DAST for teams who need results they can trust.**
 
-> ### ⚠️ Authorised use only
+> ### Authorised use only
 >
 > JANISSARY is a dual-use security testing tool. Use it **only**
-> against systems you own, or systems you have the prior, explicit,
-> written permission of the owner to test.
->
-> Unauthorised access to computer systems is a criminal offence in
-> Australia (Criminal Code Act 1995 (Cth) ss 477–478), the United
-> States (18 U.S.C. § 1030 — CFAA), the United Kingdom (Computer
-> Misuse Act 1990), the European Union (Directive 2013/40/EU), and
-> most other jurisdictions.
+> against systems you own, or systems you have prior written
+> permission to test.
 >
 > By running any network command you accept the
-> [Terms of Use](LEGAL.md), including the authorised-use requirement,
-> the user indemnity, and the limitation of liability. Acceptance is
-> recorded locally in `~/.janissary/terms-accepted.json`; no data is
-> transmitted.
->
-> Review the terms at any time with `janissary terms show`.
+> [Terms of Use](LEGAL.md). Review with `janissary terms show`.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
 
-JANISSARY scans web endpoints for SQL injection, XSS, SSRF, and
-path traversal, discovers leaked credentials in Git history and
-config files, and produces SARIF reports that plug into GitHub
-Advanced Security.
-
-Built for penetration testers and small security teams who need
-Burp-class automation without Burp-class pricing.
+---
 
 ## Why JANISSARY
 
-Most DAST tools fall into two camps: expensive enterprise platforms
-(Invicti, Acunetix) or raw scripts that produce unusable noise.
-JANISSARY sits in between: automated, CI-friendly, and tuned for low
-false positives.
+Most DAST tools are either expensive enterprise platforms or raw scripts that produce unusable noise. JANISSARY is different in three specific ways:
 
-- **Differential detection engine** -- every finding is gated by a
-  baseline comparison, not a keyword match.
-- **Credential discovery** -- scans Git history, env files, and config
-  files for leaked secrets.
-- **WAF-aware pacing** -- detects Cloudflare, Akamai, Sucuri, and
-  Imperva, then automatically adjusts delay, concurrency, and
-  User-Agent to avoid triggering blocks.
-- **Nuclei integration** -- runs your existing Nuclei templates
-  through the same baseline-gated pipeline.
-- **SARIF and HTML output** -- plugs into GitHub Advanced Security,
-  GitLab SAST, and DefectDojo.
+**Differential detection eliminates false positives by design.** Every finding is gated by a baseline comparison. No finding is ever emitted from a single response alone.
+
+**WAF-aware pacing keeps you under the radar.** JANISSARY detects Cloudflare, Akamai, Sucuri, Imperva, AWS WAF, F5, Barracuda, ModSecurity, Wordfence, and Fastly, then backs off on blocks and recovers on clean streaks.
+
+**Multi-protocol coverage.** HTTP, XML-RPC, GraphQL, and WebSocket, combined into a single agent run.
+
+---
 
 ## Install
 
@@ -58,72 +34,103 @@ false positives.
 pip install janissary
 ```
 
-Or from source:
-
-```bash
-git clone https://github.com/yourorg/janissary
-cd janissary
-pip install -e ".[dev]"
-```
+---
 
 ## Quickstart
+
+Accept the Terms of Use (required once before any network command):
+
+```bash
+janissary terms accept
+```
 
 Scan a single endpoint:
 
 ```bash
-janissary -u "https://target.example/api/search?q=test" -p q
-```
-
-Scan a POST form:
-
-```bash
-janissary -u "https://target.example/login" -p username,password --method POST
+janissary scan -u "https://target.example/search?q=test" -p q
 ```
 
 Scan a Git repository for leaked credentials:
 
 ```bash
-janissary --scan-git ./my-repo
+janissary creds ./my-repo --scan-git
 ```
 
-Export findings to SARIF:
+Fingerprint a target:
 
 ```bash
-janissary -u "https://target.example/api/search?q=test" -p q --sarif-export findings.sarif
+janissary fingerprint https://target.example
 ```
 
-## Detection Engine
+Probe for admin panels:
 
-JANISSARY's detection engine is built on differential analysis. For
-each parameter, it collects a baseline of benign requests, normalizes
-dynamic content (CSRF tokens, timestamps, session IDs), and then
-compares each payload response against that baseline. A finding is
-emitted only when multiple independent gates pass:
+```bash
+janissary admin https://target.example
+```
 
-- The DB error pattern matches the payload response **and** does not
-  match any baseline response.
-- The XSS payload reflects unescaped **and** in an executable HTML
-  context.
-- The response time exceeds the declared sleep floor **and** the
-  baseline has a trustworthy timing distribution.
-- The status changes from 2xx to 5xx.
+---
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `scan` | HTTP scanning: SQLi, XSS, SSRF, traversal, cmdi |
+| `creds` | Credential discovery in tree or Git history |
+| `fingerprint` | CMS and technology identification |
+| `graphql` | GraphQL detection and field enumeration |
+| `ws` | WebSocket recon |
+| `admin` | Admin panel discovery, 18 platforms |
+| `agent` | Orchestrates recon, persists findings |
+| `terms` | Show, check, or accept Terms of Use |
+| `attack sqli-union` | UNION extractor (gated) |
+| `attack nuclei` | Nuclei runner (gated) |
+
+Run `janissary --help` for full flags.
+
+---
+
+## Attack modules
+
+The `attack` subcommands are opt-in. They require `--attack-confirm` in addition to the Terms-of-Use gate. Neither alone is enough.
+
+- **`attack sqli-union`** - extracts DBMS version, current database, database list, and table list from a vulnerable parameter. Hard limits: 32 columns, 100 rows, 64KB. Aborts on instability.
+- **`attack nuclei`** - shells out to the Nuclei binary, streams JSONL, parses findings. Requires an explicit template list; refuses to run Nuclei's default set.
+
+---
+
+## Agent
+
+The `agent` command ties the recon modules together: fingerprint, detect WAF, consult the platform knowledge base, run applicable modules, persist findings.
+
+```bash
+janissary agent https://target.example --attack-confirm --store findings.json
+```
+
+---
 
 ## Status
 
-Early development. The differential detection engine is complete and
-tested (28 tests, 91% coverage). The scanner that drives it is being
-ported incrementally from the original v7.0.0 prototype.
+**Phase 3 complete.** 303 tests passing. All subsystems shipped:
+
+- Phase 0 - green baseline
+- Phase 1 - credentials, Git history, WAF + pacer, XML-RPC, fingerprint
+- Phase 2 - GraphQL, WebSocket, admin probe
+- Phase 3 - SQLi UNION extractor, Nuclei runner, agent
+
+Roadmap: [JANISSARY_ASCENSION.md](JANISSARY_ASCENSION.md).
+
+---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). We welcome payload
-contributions, new detection gates, and integrations.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security
 
-To report a vulnerability in JANISSARY itself, see
-[SECURITY.md](SECURITY.md).
+See [SECURITY.md](SECURITY.md).
 
 ## License
 
-Apache 2.0. See [LICENSE](LICENSE).
+Apache 2.0 for the source code. See [LICENSE](LICENSE).
+
+Use is additionally governed by the [Terms of Use](LEGAL.md), which supplement and do not replace the Apache 2.0 licence.
