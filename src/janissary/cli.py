@@ -686,6 +686,118 @@ def cmd_attack_nuclei(args: argparse.Namespace) -> int:
     return 1 if result.findings else 0
 
 
+def cmd_agent(args: argparse.Namespace) -> int:
+    from janissary.agent import Agent, FindingStore
+    from janissary.agent.adapters import default_adapters
+    from janissary.recon.fingerprint import fingerprint as run_fingerprint
+
+    if not args.attack_confirm:
+        print(
+            "[!] --attack-confirm is required. The agent runs active "
+            "reconnaissance modules against a target.",
+            file=sys.stderr,
+        )
+        print(
+            "    This is a separate gate from the Terms of Use. "
+            "Both are required.",
+            file=sys.stderr,
+        )
+        return 64
+
+    store = FindingStore(args.store)
+    loaded = store.load()
+
+    proxies = None
+    if getattr(args, "proxy", None):
+        proxies = {"http": args.proxy, "https": args.proxy}
+
+    # Fingerprinter wrapper that merges CMS and WAF into one object
+    # the agent can read.
+    def _fp(target: str):
+        import requests as _rq
+
+        from janissary.recon.waf import WAFDetector
+
+        fp = run_fingerprint(
+            target, timeout=args.timeout, proxies=proxies
+        )
+        # Attach a WAF profile so the agent can report it.
+        try:
+            session = _rq.Session()
+            det = WAFDetector(
+                session=session, timeout=args.timeout, proxies=proxies
+            )
+            fp.waf = det.detect(target)
+        except Exception:
+            fp.waf = None
+        return fp
+
+    agent = Agent(
+        store,
+        adapters=default_adapters(),
+        fingerprinter=_fp,
+    )
+
+    if not args.quiet:
+        print("JANISSARY — agent")
+        print("=" * 60)
+        print(f"[*] Target: {args.url}")
+        if loaded:
+            print(f"[*] Loaded {loaded} finding(s) from {args.store}")
+        print()
+        print("[!] Active reconnaissance. Only run against systems you")
+        print("    are authorised to test.")
+        print()
+
+    extra_platforms = None
+    if args.platforms:
+        extra_platforms = [
+            p.strip() for p in args.platforms.split(",") if p.strip()
+        ]
+
+    result = agent.run(args.url, extra_platforms=extra_platforms)
+
+    if not args.quiet:
+        print(f"[*] Platforms:       {', '.join(result.platforms) or '-'}")
+        print(f"[*] WAF:             {result.waf or '-'}")
+        print(f"[*] Plan:            {', '.join(result.plan) or '-'}")
+        print(f"[*] Modules run:     {', '.join(result.modules_run) or '-'}")
+        if result.modules_skipped:
+            print(f"[*] Modules skipped: {', '.join(result.modules_skipped)}")
+        print(f"[*] New findings:    {result.new_findings}")
+        print(f"[*] Total findings:  {result.total_findings}")
+        if result.aborted:
+            print(f"[!] ABORTED: {result.abort_reason}")
+        summary = store.summary()
+        if summary["by_severity"]:
+            print()
+            print("  Severity breakdown:")
+            for sev, n in sorted(summary["by_severity"].items()):
+                print(f"    {sev:10} {n}")
+
+    store.save()
+    if not args.quiet:
+        print(f"[*] Findings written to {args.store}")
+
+    if args.export:
+        import json as _json
+        with open(args.export, "w", encoding="utf-8") as fh:
+            _json.dump(
+                {
+                    "run": result.to_dict(),
+                    "summary": store.summary(),
+                    "findings": [f.to_dict() for f in store.all()],
+                },
+                fh,
+                indent=2,
+            )
+        print(f"[*] Results exported to {args.export}")
+
+    if result.aborted:
+        return 2
+    return 1 if result.new_findings else 0
+
+
 def _write_sarif(summary: ScanSummary, path: str) -> None:
     """Emit a minimal SARIF 2.1.0 document."""
     results = []
@@ -868,6 +980,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="show the full text (default), report status, or accept",
     )
     terms.set_defaults(func=cmd_terms)
+
+    # -- agent ----------------------------------------------------
+    agent = sub.add_parser(
+        "agent",
+        help="orchestrate reconnaissance modules against a target",
+    )
+    agent.add_argument("url", help="target base URL")
+    agent.add_argument(
+        "--store", default="janissary_findings.json",
+        help="path to the findings store (default: janissary_findings.json)",
+    )
+    agent.add_argument(
+        "--platforms", default=None,
+        help="comma-separated list of platforms to force "
+             "(e.g. wordpress,graphql)",
+    )
+    agent.add_argument(
+        "--attack-confirm", action="store_true",
+        help="required: confirm you are authorised to test this target",
+    )
+    agent.add_argument("--timeout", type=float, default=10.0)
+    agent.add_argument("--proxy", default=None,
+                       help="HTTP proxy URL (e.g. http://127.0.0.1:8080)")
+    agent.add_argument("--export", default=None,
+                       help="write the full run to a .json file")
+    agent.add_argument("--quiet", action="store_true")
+    agent.set_defaults(func=cmd_agent)
 
     # -- attack ---------------------------------------------------
     attack = sub.add_parser(

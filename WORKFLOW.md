@@ -1,8 +1,8 @@
 # JANISSARY — Port Workflow Tracker
 
-## STATUS: PHASE 3 — IN PROGRESS
-## NEXT: P3.3 — Agent / FindingStore / PlatformKB
-## LAST COMPLETED: P3.2 — Nuclei runner (257 tests pass)
+## STATUS: PHASE 3 COMPLETE - PHASE 4 READY
+## NEXT: Phase 4 — Launch (README polish, M4 blog post + demo video)
+## LAST COMPLETED: P3.3 — Agent / FindingStore / PlatformKB (303 tests pass)
 
 Last updated: 2026-09-26
 Project root: C:\Users\M5 E60\janissary-project\janissary
@@ -57,11 +57,11 @@ Goal: janissary scan finds a real SQLi on a mock server.
 - [x] P2.2 WebSocket scanner
 - [x] P2.3 Admin panel probe
 
-## Phase 3 — Low-value / risky subsystems — IN PROGRESS
+## Phase 3 — Low-value / risky subsystems — COMPLETE
 
 - [x] P3.1 SQLi UNION extractor (gated behind --attack-confirm)
 - [x] P3.2 Nuclei runner (expose NucleiRunner, drop stub)
-- [ ] P3.3 Agent / FindingStore / PlatformKB
+- [x] P3.3 Agent / FindingStore / PlatformKB
 
 ## Legal framework — DONE
 
@@ -180,35 +180,66 @@ Suite: 257 tests passing. Ruff clean.
 
 ---
 
+## P3.3 - Agent / FindingStore / PlatformKB (DONE)
+
+Three new submodules in src/janissary/agent/.
+
+finding_store.py:
+- Finding dataclass, FindingStore class.
+- Append-only, deduplicating (sha256 over
+  target|category|finding_type|discriminator).
+- Atomic saves: write to tmp, os.replace. Original untouched on crash.
+- Load tolerates missing file, corrupt JSON, non-dict entries.
+- Query helpers: by_target, by_severity, by_category, summary.
+
+platform_kb.py:
+- Surface dataclass, PLATFORMS table covering 11 platforms.
+- surfaces_for(platform), modules_for(platform), plan_for(list).
+- plan_for is stable and de-duplicated, ignoring unknown platforms.
+
+agent.py:
+- Agent orchestrator with AgentRun result type.
+- Takes a fingerprinter callback; reads .cms and .waf.
+- Runs adapters in plan order; a missing or raising adapter is
+  skipped, never fatal.
+- Optional allowed_platforms filter, max_modules cap.
+
+adapters.py:
+- Real-world adapters wrapping recon/admin, integrations/xmlrpc,
+  integrations/graphql, recon/fingerprint.
+- Kept in a separate module so the agent stays unit-testable.
+
+CLI:
+- janissary agent <url> --attack-confirm
+- Flags: --store, --platforms, --timeout, --proxy, --export, --quiet.
+- Persists findings to a JSON store, prints severity breakdown.
+
+Tests:
+- tests/unit/test_finding_store.py - 19
+- tests/unit/test_platform_kb.py - 12
+- tests/unit/test_agent.py - 15
+
+Suite: 303 tests passing. Ruff clean. Phase 3 complete.
+
+---
+
 ## Current step
 
-P3.3 - Agent / FindingStore / PlatformKB.
+Phase 4 - Launch.
 
-Not yet started. Design notes:
+NEXT: M4 - Technical blog post + demo video.
 
-- This is the last Phase 3 module. It is the piece that turns
-  JANISSARY from a set of scanners into a platform: a place for
-  findings to live, a place for platform knowledge to live, and an
-  agent that ties the two together.
-- Likely home: src/janissary/agent/ as a new package. Submodules:
-    - finding_store.py - append-only store of findings, keyed by
-      target + hash. JSON or SQLite. No server.
-    - platform_kb.py - the knowledge base. Static data describing
-      known platforms (from recon/fingerprint and recon/admin) and
-      the attack surfaces each one exposes. Eventually this drives
-      which modules to run against which target.
-    - agent.py - the orchestrator. Takes a target, fingerprints it,
-      queries the KB, picks modules, runs them, writes findings to
-      the store.
-- Open question: does the agent need a config file, or is it
-  purely CLI-driven? Lean toward CLI-driven for now; config can
-  come when there is a real need.
-- The store must be readable by the reporting layer. Keep it
-  format-agnostic in shape: a list of dicts with stable keys.
-- Tests: tests/unit/test_finding_store.py, tests/unit/test_platform_kb.py,
-  tests/unit/test_agent.py. Mocked sessions, no live network.
-- The agent is the natural place to wire in the AdaptivePacer and
-  WAFDetector from recon, so a full agent run stays stealthy.
+After that:
+- M5 README polish (use the positioning statement from
+  JANISSARY_ASCENSION.md).
+- M6 Launch posts: HN (Show HN), r/netsec, r/AskNetsec,
+  r/blueteamsec, OWASP Slack, awesome-security lists.
+- M7 Claim listings: G2, Capterra, PeerSpot, AlternativeTo.
+
+The detailed plan for each milestone is in JANISSARY_ASCENSION.md.
+Track progress with:
+
+    python tools/ascension.py
 ## Git status note
 
 All work through P3.1 is committed and pushed. The legal framework,
