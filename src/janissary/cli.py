@@ -30,11 +30,13 @@ def _summary_to_dict(summary: ScanSummary) -> dict:
         "method": summary.method,
         "total_requests": summary.total_requests,
         "finding_count": summary.finding_count,
+        "group_count": len(summary.groups),
         "aborted": summary.aborted,
         "abort_reason": summary.abort_reason,
         "baselines": summary.baselines,
         "waf": summary.waf,
         "pacer": summary.pacer,
+        "groups": [g.to_dict() for g in summary.groups],
         "findings": [
             {
                 "param": f.param,
@@ -67,7 +69,12 @@ def _print_summary(summary: ScanSummary) -> None:
     print(f"  Parameters:      {', '.join(summary.params)}")
     print(f"  Method:          {summary.method}")
     print(f"  Total requests:  {summary.total_requests}")
-    print(f"  Findings:        {summary.finding_count}")
+    group_n = len(summary.groups)
+    plural = "" if group_n == 1 else "s"
+    print(
+        f"  Findings:        {summary.finding_count} "
+        f"in {group_n} group{plural}"
+    )
 
     if summary.aborted:
         print(f"  ABORTED:         {summary.abort_reason}")
@@ -101,6 +108,20 @@ def _print_summary(summary: ScanSummary) -> None:
                 f"mean={b['mean_elapsed']}s std={b['std_elapsed']}s "
                 f"stable_body={b['stable_body']}"
             )
+
+    if summary.groups:
+        print()
+        print("  Findings:")
+        for i, g in enumerate(summary.groups, start=1):
+            print(
+                f"    F-{i:03d}  {g.severity.upper():8} "
+                f"{g.category}:{g.root_cause}  (param={g.param})"
+            )
+            for e in g.evidence:
+                print(
+                    f"           - [{e.payload_name}] "
+                    f"{e.finding_type}: {e.detail[:80]}"
+                )
 
     if summary.findings:
         print()

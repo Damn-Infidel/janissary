@@ -111,6 +111,7 @@ class ScanSummary:
     abort_reason: str | None = None
     baselines: dict = field(default_factory=dict)
     findings: list[ScanFinding] = field(default_factory=list)
+    groups: list = field(default_factory=list)
     waf: dict | None = None
     pacer: dict | None = None
 
@@ -351,6 +352,12 @@ class Scanner:
                             f"{finding.severity.upper()}: {finding.finding_type} "
                             f"| {finding.detail[:80]}"
                         )
+
+                # Group findings by root cause so the summary reports bugs,
+        # not raw evidence rows.
+        from janissary.engine.grouping import group_findings
+
+        summary.groups = group_findings(summary.findings)
 
         # Attach recon data to the summary.
         if self.waf_profile is not None:
