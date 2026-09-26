@@ -585,6 +585,107 @@ def cmd_attack_sqli_union(args: argparse.Namespace) -> int:
     return 0 if result.version or result.current_database else 1
 
 
+def cmd_attack_nuclei(args: argparse.Namespace) -> int:
+    from janissary.attack.nuclei import (
+        AttackConfirmationRequired,
+        NucleiNotFound,
+        NucleiRunner,
+    )
+
+    if not args.attack_confirm:
+        print(
+            "[!] --attack-confirm is required. This command runs Nuclei "
+            "against a target and will not run without an explicit "
+            "confirmation flag.",
+            file=sys.stderr,
+        )
+        print(
+            "    This is a separate gate from the Terms of Use. "
+            "Both are required.",
+            file=sys.stderr,
+        )
+        return 64
+
+    templates = [t.strip() for t in (args.templates or "").split(",") if t.strip()]
+    if not templates:
+        print(
+            "[!] --templates is required. Provide a comma-separated list "
+            "of Nuclei template paths or directories.",
+            file=sys.stderr,
+        )
+        print(
+            "    The runner will not use Nuclei's default template set.",
+            file=sys.stderr,
+        )
+        return 64
+
+    tags = None
+    if args.tags:
+        tags = [t.strip() for t in args.tags.split(",") if t.strip()]
+
+    if not args.quiet:
+        print("JANISSARY — Nuclei runner")
+        print("=" * 60)
+        print(f"[*] Target:    {args.url}")
+        print(f"[*] Templates: {', '.join(templates)}")
+        if args.severity:
+            print(f"[*] Severity:  {args.severity}")
+        if tags:
+            print(f"[*] Tags:      {', '.join(tags)}")
+        print()
+        print("[!] Active scan mode. Only run against systems you are")
+        print("    authorised to test.")
+        print()
+
+    try:
+        runner = NucleiRunner(
+            target=args.url,
+            templates=templates,
+            attack_confirm=True,
+            severity=args.severity,
+            tags=tags,
+            timeout=args.timeout,
+            rate_limit=args.rate_limit,
+        )
+    except AttackConfirmationRequired as exc:
+        print(f"[!] {exc}", file=sys.stderr)
+        return 64
+    except NucleiNotFound as exc:
+        print(f"[!] {exc}", file=sys.stderr)
+        return 69
+    except ValueError as exc:
+        print(f"[!] {exc}", file=sys.stderr)
+        return 64
+
+    result = runner.run()
+
+    if not args.quiet:
+        print(f"[*] Exit code:     {result.exit_code}")
+        print(f"[*] Elapsed:       {result.elapsed:.2f}s")
+        print(f"[*] Findings:      {len(result.findings)}")
+        if result.stderr_tail:
+            print("[*] stderr tail:")
+            for line in result.stderr_tail.splitlines():
+                print(f"      {line}")
+        if result.findings:
+            print()
+            print("  Findings:")
+            for f in result.findings:
+                print(f"    {f.severity.upper():8} [{f.template_id}] {f.name}")
+                print(f"             {f.matched_at}")
+        if result.aborted:
+            print(f"[!] ABORTED: {result.abort_reason}")
+
+    if args.export:
+        with open(args.export, "w", encoding="utf-8") as fh:
+            json.dump(result.to_dict(), fh, indent=2)
+        print(f"[*] Results exported to {args.export}")
+
+    if result.aborted:
+        return 2
+    return 1 if result.findings else 0
+
+
 def _write_sarif(summary: ScanSummary, path: str) -> None:
     """Emit a minimal SARIF 2.1.0 document."""
     results = []
@@ -796,6 +897,29 @@ def build_parser() -> argparse.ArgumentParser:
                        help="write results to a .json file")
     union.add_argument("--quiet", action="store_true")
     union.set_defaults(func=cmd_attack_sqli_union)
+
+    nuclei = attack_sub.add_parser(
+        "nuclei", help="run Nuclei templates against a target"
+    )
+    nuclei.add_argument("url", help="target URL")
+    nuclei.add_argument(
+        "--templates", required=True,
+        help="comma-separated list of template paths or directories",
+    )
+    nuclei.add_argument("--severity", default=None,
+                        help="filter by severity (e.g. high,critical)")
+    nuclei.add_argument("--tags", default=None,
+                        help="filter by tags (e.g. cve,rce)")
+    nuclei.add_argument(
+        "--attack-confirm", action="store_true",
+        help="required: confirm you are authorised to scan this target",
+    )
+    nuclei.add_argument("--timeout", type=float, default=300.0)
+    nuclei.add_argument("--rate-limit", type=int, default=50)
+    nuclei.add_argument("--export", default=None,
+                        help="write results to a .json file")
+    nuclei.add_argument("--quiet", action="store_true")
+    nuclei.set_defaults(func=cmd_attack_nuclei)
 
     return p
 

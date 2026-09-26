@@ -10,6 +10,14 @@ entry point into it must require an explicit --attack-confirm flag
 in addition to the Terms-of-Use gate.
 """
 
+from .nuclei import (
+    NucleiError,
+    NucleiFinding,
+    NucleiNotFound,
+    NucleiRun,
+    NucleiRunner,
+    parse_nuclei_line,
+)
 from .sqli_union import (
     AttackConfirmationRequired,
     ExtractionResult,
@@ -25,9 +33,15 @@ __all__ = [
     "AttackConfirmationRequired",
     "ExtractionResult",
     "ExtractionStep",
+    "NucleiError",
+    "NucleiFinding",
+    "NucleiNotFound",
+    "NucleiRun",
+    "NucleiRunner",
     "UnionExtractor",
     "UnstableTargetError",
     "build_union_payload",
     "detect_dbms",
+    "parse_nuclei_line",
     "split_concat",
 ]

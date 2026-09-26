@@ -1,8 +1,8 @@
 # JANISSARY — Port Workflow Tracker
 
 ## STATUS: PHASE 3 — IN PROGRESS
-## NEXT: P3.2 — Nuclei runner
-## LAST COMPLETED: P3.1 — SQLi UNION extractor (235 tests pass)
+## NEXT: P3.3 — Agent / FindingStore / PlatformKB
+## LAST COMPLETED: P3.2 — Nuclei runner (257 tests pass)
 
 Last updated: 2026-09-26
 Project root: C:\Users\M5 E60\janissary-project\janissary
@@ -60,7 +60,7 @@ Goal: janissary scan finds a real SQLi on a mock server.
 ## Phase 3 — Low-value / risky subsystems — IN PROGRESS
 
 - [x] P3.1 SQLi UNION extractor (gated behind --attack-confirm)
-- [ ] P3.2 Nuclei runner (expose NucleiRunner, drop stub)
+- [x] P3.2 Nuclei runner (expose NucleiRunner, drop stub)
 - [ ] P3.3 Agent / FindingStore / PlatformKB
 
 ## Legal framework — DONE
@@ -155,46 +155,60 @@ Suite: 235 tests passing. Ruff clean.
 
 ---
 
-## Current step
+## P3.2 - Nuclei runner (DONE)
 
-P3.2 - Nuclei runner.
+- src/janissary/attack/nuclei.py provides NucleiRunner, which shells
+  out to the nuclei binary, requests JSONL output, and parses each
+  line into a NucleiFinding.
+- parse_nuclei_line() handles blank lines, non-JSON, non-dict JSON,
+  and objects without a template-id by returning None. It accepts
+  both 'template-id' and 'templateID' spellings, and both list and
+  comma-separated-string forms for tags and reference.
+- Guard rails, three layers:
+    1. attack_confirm=True required at construction.
+    2. nuclei binary must resolve on PATH (NucleiNotFound otherwise).
+    3. templates must be a non-empty list. The runner refuses to use
+       nuclei's default template set.
+- Exit-code handling: 0 clean, 1 findings (not an error), anything
+  else marks the run aborted.
+- Timeout is clamped to 1800s. Rate limit defaults to 50.
+- CLI: janissary attack nuclei <url> --templates a,b --severity X
+  --tags Y --attack-confirm.
+- tests/unit/test_nuclei.py - 22 tests, subprocess.run mocked.
 
-STATUS: PAUSED at a design decision. Nothing coded yet.
-
-### OPEN DECISION: where does the Nuclei module live?
-
-**Option A - src/janissary/attack/nuclei.py**
-
-- Nuclei is active exploitation. Everything in attack/ carries the
-  --attack-confirm gate.
-- Consistent with P3.1: extraction and exploitation live together.
-- The gate is the legal mechanism. Placing the module here means it
-  inherits that framing without argument.
-
-**Option B - src/janissary/integrations/nuclei.py**
-
-- Nuclei is an external binary. integrations/ already holds the
-  protocol clients (xmlrpc, graphql, websocket).
-- The module's job is mostly subprocess + JSONL parsing.
-- BUT: integrations/ modules do not all carry the attack-confirm
-  gate, so the gate would have to be added explicitly.
-
-**Leaning:** Option A, because the gate is what matters legally and
-attack/ already establishes it. Confirm before coding.
-
-### Design notes (once placement is decided)
-
-- Shell out via subprocess; stream JSONL; parse each line.
-- Do not reimplement Nuclei's template engine.
-- Require --attack-confirm; refuse if nuclei is not on PATH;
-  require an explicit --templates list rather than the default set.
-- CLI: janissary attack nuclei <url> with --templates, --severity,
-  --attack-confirm, --timeout, --export, --quiet.
-- Tests: tests/unit/test_nuclei.py, mocking subprocess.run.
-- Confirm DSGL position with Defence Export Controls before any
-  public release.
+Suite: 257 tests passing. Ruff clean.
 
 ---
+
+## Current step
+
+P3.3 - Agent / FindingStore / PlatformKB.
+
+Not yet started. Design notes:
+
+- This is the last Phase 3 module. It is the piece that turns
+  JANISSARY from a set of scanners into a platform: a place for
+  findings to live, a place for platform knowledge to live, and an
+  agent that ties the two together.
+- Likely home: src/janissary/agent/ as a new package. Submodules:
+    - finding_store.py - append-only store of findings, keyed by
+      target + hash. JSON or SQLite. No server.
+    - platform_kb.py - the knowledge base. Static data describing
+      known platforms (from recon/fingerprint and recon/admin) and
+      the attack surfaces each one exposes. Eventually this drives
+      which modules to run against which target.
+    - agent.py - the orchestrator. Takes a target, fingerprints it,
+      queries the KB, picks modules, runs them, writes findings to
+      the store.
+- Open question: does the agent need a config file, or is it
+  purely CLI-driven? Lean toward CLI-driven for now; config can
+  come when there is a real need.
+- The store must be readable by the reporting layer. Keep it
+  format-agnostic in shape: a list of dicts with stable keys.
+- Tests: tests/unit/test_finding_store.py, tests/unit/test_platform_kb.py,
+  tests/unit/test_agent.py. Mocked sessions, no live network.
+- The agent is the natural place to wire in the AdaptivePacer and
+  WAFDetector from recon, so a full agent run stays stealthy.
 ## Git status note
 
 All work through P3.1 is committed and pushed. The legal framework,
