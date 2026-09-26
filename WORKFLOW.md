@@ -240,6 +240,55 @@ The detailed plan for each milestone is in JANISSARY_ASCENSION.md.
 Track progress with:
 
     python tools/ascension.py
+## Post-launch backlog
+
+Candidates for the first feature after M4/M6/M7 ship. Final pick
+should be driven by user feedback, not decided now.
+
+Tier 1 - adoption blockers
+
+- Authenticated scanning. Sessions, token refresh, login flow.
+  Reuse requests.Session. New flag group: --login-url, --login-data,
+  --auth-header. Effort: medium. Impact: very high. Currently the
+  single biggest gap vs top-20 tools.
+
+- OpenAPI / Swagger ingestion. Parse spec, enumerate endpoints and
+  params, drive Scanner. Handles 2.0, 3.0, 3.1, $ref resolution.
+  Effort: medium (2-3x P3.2). Impact: high for API-first targets.
+
+- Crawler / endpoint discovery. Same-origin links, forms,
+  robots.txt, sitemap.xml. Static HTML first; headless browser
+  later if warranted. Effort: high. Impact: very high, but changes
+  the tool's character from fast-targeted to slower-thorough.
+
+Tier 2 - high value
+
+- Out-of-band (OAST) detection. Callback server for blind SSRF,
+  XXE, blind cmdi. Effort: high. Impact: medium-high.
+
+- Compliance report templates (PCI, HIPAA). PDF rendering of
+  existing findings. Effort: low-medium. Impact: matters for the
+  Phase 6 enterprise sale.
+
+- CI/CD native action. Publish action.yml, document the recipe.
+  Effort: low. Impact: medium.
+
+Tier 3 - differentiators, not blockers
+
+- Intercepting proxy mode. Large; changes the tool's character.
+  Not recommended.
+
+- IAST integration. Requires agent on target. Out of scope.
+
+- SPA crawling via Playwright. Playwright already an optional dep.
+  Dramatically slower; conflicts with the speed positioning.
+
+Sequencing rule: ship M4, M6, M7 first. Build whichever Tier 1 item
+users ask for most. If the answer is unclear after launch, build
+authenticated scanning - it is the safest bet.
+
+---
+
 ## Git status note
 
 All work through P3.1 is committed and pushed. The legal framework,
