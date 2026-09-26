@@ -47,3 +47,9 @@ test-install/
 # Editor / tooling backups
 *.bak
 
+
+# asciinema recordings
+demo.cast
+
+# local scratch
+vulnapp.py
